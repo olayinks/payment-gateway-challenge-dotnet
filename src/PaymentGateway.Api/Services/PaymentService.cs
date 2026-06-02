@@ -10,6 +10,11 @@ public class PaymentService(PaymentsRepository repository) : IPaymentService
 {
     private readonly PaymentsRepository _repository = repository;
 
+    public Task<Payment> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
     public Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotentKey, CancellationToken cancellationToken)
     {
         throw new NotImplementedException();

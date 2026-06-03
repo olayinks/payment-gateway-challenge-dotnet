@@ -148,6 +148,42 @@ public class PaymentServiceTests
         result.Errors.ShouldNotBeEmpty();
         bankClient.Verify(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task ProcessAsync_trims_idempotency_key_before_lookup()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
+        var repository = new PaymentsRepository();
+        var service = CreatePaymentService(repository, bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), "  same-key  ", CancellationToken.None);
+
+        result.AlreadyProcessed.ShouldBeFalse();
+        result.Payment.ShouldNotBeNull();
+        repository.GetIdempotencyRecord("same-key").ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task ProcessAsync_stores_declined_payment_when_bank_client_throws_unexpected_exception()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("unexpected failure"));
+        var repository = new PaymentsRepository();
+        var service = CreatePaymentService(repository, bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        result.Payment.ShouldNotBeNull();
+        result.Payment!.Status.ShouldBe(PaymentStatus.Declined);
+        result.Payment.ErrorMessage.ShouldBe("An unexpected error occurred during payment processing");
+        repository.Get(result.Payment.Id)!.Status.ShouldBe(PaymentStatus.Declined);
+    }
+
     [Fact]
     public async Task ProcessAsync_should_throw_exception_when_IdempotencyKey_isUsed_with_different_payload()
     {

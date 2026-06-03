@@ -7,7 +7,7 @@ namespace PaymentGateway.Api.Models.Domain;
 
 public class Payment
 {
-    public Guid Id { get; set; } = new Guid();
+    public Guid Id { get; set; } = Guid.NewGuid();
     public PaymentStatus Status { get; set; }
     public string CardNumberLastFour { get; set; } = string.Empty;
     public int ExpiryMonth { get; set; }

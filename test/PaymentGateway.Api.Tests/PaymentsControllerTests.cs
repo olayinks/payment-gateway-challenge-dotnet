@@ -28,7 +28,7 @@ public class PaymentsControllerTests
         };
 
         var paymentsRepository = new PaymentsRepository();
-        paymentsRepository.Add(payment);
+      //  paymentsRepository.Add(payment);
 
         var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using AutoMapper;
 
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 
 using Moq;
 
@@ -11,6 +12,7 @@ using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
+using PaymentGateway.Api.Models.Validation;
 using PaymentGateway.Api.Services;
 
 using Shouldly;
@@ -28,26 +30,18 @@ public class PaymentServiceTests
             .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "0bb07405-6d44-4b50-a14f-7ae0beff13ad" });
 
         var paymentService = CreatePaymentService(repository, bankClientMock.Object);
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "4111111111111111",
-            ExpiryMonth = 12,
-            ExpiryYear = 2025,
-            Cvv = "123",
-            Amount = 100,
-            Currency = "USD"
-        };
 
         // Act
-        var result = await paymentService.ProcessAsync(request, null, CancellationToken.None);
-        var storedPayment = repository.Get(result.Payment.Id);
+        var result = await paymentService.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+        var storedPayment = repository.Get(result.Payment!.Id);
+        var expectedExpiryDate = $"12/{ TestData.PaymentRequest().ExpiryYear}";
 
         // Assert
         result.Payment.Status.ShouldBe(PaymentStatus.Authorized);
         result.Payment.CardNumberLastFour.ShouldBe("1111");
         storedPayment.ShouldNotBeNull();
         storedPayment.CardNumberLastFour.ShouldBe("1111");
-        bankClientMock.Verify(client => client.AuthorizeAsync(It.Is<BankPaymentRequest>(request => request.CardNumber == "4111111111111111" && request.ExpiryDate == "12/25"), It.IsAny<CancellationToken>()), Times.Once);
+        bankClientMock.Verify(client => client.AuthorizeAsync(It.Is<BankPaymentRequest>(request => request.CardNumber == "4111111111111111" && request.ExpiryDate == expectedExpiryDate), It.IsAny<CancellationToken>()), Times.Once);
 
 
     }
@@ -68,8 +62,25 @@ public class PaymentServiceTests
 
         first.AlreadyProcessed.ShouldBeFalse();
         second.AlreadyProcessed.ShouldBeTrue();
-        second.Payment.Id.ShouldBe(first.Payment.Id);
+        second.Payment!.Id.ShouldBe(first.Payment!.Id);
         bankClient.Verify(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_stores_declined_payment_when_bank_declines()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = false, AuthorizationCode = string.Empty });
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest("4242424242424242"), idempotencyKey: null, CancellationToken.None);
+        result.Payment.ShouldNotBeNull();
+        var payment = result.Payment!;
+
+        payment.Status.ShouldBe(PaymentStatus.Declined);
+        payment.CardNumberLastFour.ShouldBe("4242");
     }
 
     [Fact]
@@ -84,12 +95,12 @@ public class PaymentServiceTests
         await service.ProcessAsync(TestData.PaymentRequest("4111111111111111"), "same-key", CancellationToken.None);
 
         await Should.ThrowAsync<IdempotencyConflictException>(() =>
-            service.ProcessAsync(TestData.PaymentRequest("378282246310005"), "same-key", CancellationToken.None));
+            service.ProcessAsync(TestData.PaymentRequest("4417123456789113"), "same-key", CancellationToken.None));
     }
 
 
     [Fact]
-    public async Task ProcessAsync_should_run_successfully_when_idempotencyKey_provided_but_record_does_not_exist()
+    public async Task ProcessAsync_should_run_successfully_when_idempotencyKey_provided_But_record_does_not_exist()
     {
         var bankClient = new Mock<IBankClient>();
         bankClient
@@ -99,7 +110,7 @@ public class PaymentServiceTests
         var service = CreatePaymentService(repository, bankClient.Object);
 
         var result = await service.ProcessAsync(TestData.PaymentRequest(), "new-key", CancellationToken.None);
-        var storedPayment = repository.Get(result.Payment.Id);
+        var storedPayment = repository.Get(result.Payment!.Id);
 
         result.Payment.Status.ShouldBe(PaymentStatus.Authorized);
         storedPayment.ShouldNotBeNull();
@@ -117,7 +128,7 @@ public class PaymentServiceTests
         var service = CreatePaymentService(repository, bankClient.Object);
 
         var result = await service.ProcessAsync(TestData.PaymentRequest("4000000000000010"), idempotencyKey: null, CancellationToken.None);
-        var storedPayment = repository.Get(result.Payment.Id);
+        var storedPayment = repository.Get(result.Payment!.Id);
 
         result.Payment.Status.ShouldBe(PaymentStatus.Declined);
         result.Payment.ErrorMessage.ShouldBe("Bank simulator is unavailable");
@@ -125,6 +136,18 @@ public class PaymentServiceTests
         storedPayment.Status.ShouldBe(PaymentStatus.Declined);
     }
 
+    [Fact]
+    public async Task ProcessAsync_returns_validation_errors_and_does_not_call_bank_when_request_is_invalid()
+    {
+        var bankClient = new Mock<IBankClient>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest("123"), idempotencyKey: null, CancellationToken.None);
+
+        result.Payment.ShouldBeNull();
+        result.Errors.ShouldNotBeEmpty();
+        bankClient.Verify(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
     [Fact]
     public async Task ProcessAsync_should_throw_exception_when_IdempotencyKey_isUsed_with_different_payload()
     {
@@ -137,15 +160,15 @@ public class PaymentServiceTests
         await service.ProcessAsync(TestData.PaymentRequest("4111111111111111"), "same-key", CancellationToken.None);
 
         await Should.ThrowAsync<IdempotencyConflictException>(() =>
-            service.ProcessAsync(TestData.PaymentRequest("378282246310005"), "same-key", CancellationToken.None));
+            service.ProcessAsync(TestData.PaymentRequest("4417123456789113"), "same-key", CancellationToken.None));
     }
 
-    private PaymentService CreatePaymentService(PaymentsRepository repository, IBankClient bankClient)
+    private static PaymentService CreatePaymentService(PaymentsRepository repository, IBankClient bankClient)
     {
         var logger = new Logger<PaymentService>(new LoggerFactory());
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<PaymentProfile>());
         var mapper = mapperConfig.CreateMapper();
-        return new PaymentService(repository, logger, mapper, bankClient);
+        return new PaymentService(repository, logger, mapper, bankClient, new PostPaymentRequestValidator());
     }
 
 }

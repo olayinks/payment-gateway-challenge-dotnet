@@ -1,6 +1,8 @@
 
 using AutoMapper;
 
+using FluentValidation;
+
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
@@ -10,7 +12,7 @@ using PaymentGateway.Api.Models.Requests;
 
 namespace PaymentGateway.Api.Services;
 
-public class PaymentService(PaymentsRepository repository, ILogger<PaymentService> logger, IMapper mapper, IBankClient bankClient) : IPaymentService
+public class PaymentService(PaymentsRepository repository, ILogger<PaymentService> logger, IMapper mapper, IBankClient bankClient, IValidator<PostPaymentRequest> validator) : IPaymentService
 {
 
     public Task<Payment> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
@@ -20,6 +22,14 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
 
     public async Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotencyKey, CancellationToken cancellationToken)
     {
+        var validationResult = await validator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            var errors = validationResult.Errors.Select(error => error.ErrorMessage).ToArray();
+            logger.LogInformation("Rejected invalid payment request with {ValidationErrorCount} validation errors.", errors.Length);
+            return new PaymentProcessingResult(Payment: null, AlreadyProcessed: false, Errors: errors);
+        }
+
         var requestHash = Hash(request);
         var normalizedIdempotentKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
         if (normalizedIdempotentKey != null)

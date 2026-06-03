@@ -3,6 +3,7 @@ using PaymentGateway.Api.Interfaces;
 
 using FluentValidation;
 using PaymentGateway.Api.Models.Validation;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,9 +20,9 @@ builder.Services.Configure<BankApiConfig>(builder.Configuration.GetSection("Bank
 
 builder.Services.AddSingleton<PaymentsRepository>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddHttpClient<IBankClient, BankClient>(client =>
+builder.Services.AddHttpClient<IBankClient, BankClient>((serviceProvider, client) =>
 {
-    var bankApiConfig = builder.Configuration.GetSection("BankApi").Get<BankApiConfig>();
+    var bankApiConfig = serviceProvider.GetRequiredService<IOptions<BankApiConfig>>().Value;
     client.BaseAddress = bankApiConfig.BaseUrl;
     client.Timeout = TimeSpan.FromSeconds(bankApiConfig.TimeoutSeconds);
 });

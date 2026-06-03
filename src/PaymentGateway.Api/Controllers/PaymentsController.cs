@@ -5,6 +5,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 using PaymentGateway.Api.Enums;
+using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Requests;
@@ -15,7 +16,7 @@ namespace PaymentGateway.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PaymentsController(IPaymentService paymentService, IValidator<PostPaymentRequest> validator, ILogger<PaymentsController> logger, IMapper mapper) : Controller
+public class PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger, IMapper mapper) : Controller
 {
     private const string IdempotencyKeyHeader = "Idempotency-Key";
 
@@ -30,21 +31,22 @@ public class PaymentsController(IPaymentService paymentService, IValidator<PostP
     [HttpPost]
     public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(PostPaymentRequest request, CancellationToken cancellationToken)
     {
-        var validationResult = await validator.ValidateAsync(request, cancellationToken);
-        if (!validationResult.IsValid)
-        {
-            logger.LogError("Validation failed for PostPaymentRequest: {Errors}", validationResult.Errors);
-            return BadRequest(new PostPaymentResponse
-            {
-                Status = PaymentStatus.Rejected,
-                Errors = [.. validationResult.Errors.Select(e => e.ErrorMessage)]
-            });
-        }
         try
         {
             Request.Headers.TryGetValue(IdempotencyKeyHeader, out var idempotencyKey);
             var result = await paymentService.ProcessAsync(request, idempotencyKey, cancellationToken);
+            if (result.Payment is null)
+            {
+                logger.LogInformation("Rejected invalid payment request with {ValidationErrorCount} validation errors.", result.Errors.Count);
+                return BadRequest(new PostPaymentResponse
+                {
+                    Status = PaymentStatus.Rejected,
+                    Errors = result.Errors,
+                });
+            }
+
             var response = mapper.Map<PostPaymentResponse>(result.Payment);
+
             if (result.Payment.Status is PaymentStatus.Declined)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, response);
@@ -55,13 +57,14 @@ public class PaymentsController(IPaymentService paymentService, IValidator<PostP
             }
             return Created($"/api/payments/{result.Payment.Id}", response);
         }
-        catch (Exception ex)
+        catch (IdempotencyConflictException ex)
         {
-            logger.LogError(ex, "Error processing payment");
-            return StatusCode(500, new PostPaymentResponse
+            logger.LogError(ex, "Rejected payment request because the idempotency key was reused with a different payload.");
+
+            return Conflict(new PostPaymentResponse
             {
                 Status = PaymentStatus.Rejected,
-                Errors = ["An error occurred while processing the payment. Please try again later."]
+                Errors = [ex.Message],
             });
         }
     }

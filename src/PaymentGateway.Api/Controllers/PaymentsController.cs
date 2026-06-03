@@ -21,11 +21,15 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
     private const string IdempotencyKeyHeader = "Idempotency-Key";
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<PostPaymentResponse?>> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<GetPaymentResponse?>> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
     {
-        var payment = await paymentService.GetPaymentAsync(id, cancellationToken);
+        var payment = await paymentService.GetPaymentAsync(id);
+        if (payment is null)
+        {
+            return NotFound();
+        }
 
-        return new OkObjectResult(payment);
+        return new OkObjectResult(mapper.Map<GetPaymentResponse>(payment));
     }
 
     [HttpPost]

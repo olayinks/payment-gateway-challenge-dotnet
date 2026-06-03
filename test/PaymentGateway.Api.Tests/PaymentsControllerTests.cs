@@ -125,21 +125,21 @@ public class PaymentsControllerTests
 
 
     [Fact]
-    public async Task RetrievesAPaymentSuccessfully()
+    public async Task GetPaymentAsync_returns_ok_when_payment_exists()
     {
         // Arrange
-        var payment = new PostPaymentResponse
+        var payment = new Payment
         {
             Id = Guid.NewGuid(),
-            ExpiryYear = _random.Next(2023, 2030),
-            ExpiryMonth = _random.Next(1, 12),
+            ExpiryYear = _random.Next(2026, 2030),
+            ExpiryMonth = _random.Next(7, 12),
             Amount = _random.Next(1, 10000),
-            CardNumberLastFour = _random.Next(1111, 9999),
+            CardNumberLastFour = _random.Next(1111, 9999).ToString(),
             Currency = "GBP"
         };
 
         var paymentsRepository = new PaymentsRepository();
-        //  paymentsRepository.Add(payment);
+        paymentsRepository.Add(payment);
 
         var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
@@ -152,12 +152,13 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        paymentResponse.ShouldNotBeNull();
+        paymentResponse.Id.ShouldBe(payment.Id);
     }
 
     [Fact]
-    public async Task Returns404IfPaymentNotFound()
+    public async Task GetPaymentAsync_returns_not_found_when_payment_does_not_exist()
     {
         // Arrange
         var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
@@ -167,7 +168,7 @@ public class PaymentsControllerTests
         var response = await client.GetAsync($"/api/Payments/{Guid.NewGuid()}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     private static PaymentsController CreateController(IPaymentService paymentService)

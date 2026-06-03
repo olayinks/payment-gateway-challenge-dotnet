@@ -15,9 +15,9 @@ namespace PaymentGateway.Api.Services;
 public class PaymentService(PaymentsRepository repository, ILogger<PaymentService> logger, IMapper mapper, IBankClient bankClient, IValidator<PostPaymentRequest> validator) : IPaymentService
 {
 
-    public Task<Payment> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
+    public Task<Payment> GetPaymentAsync(Guid id)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(repository.Get(id));
     }
 
     public async Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotencyKey, CancellationToken cancellationToken)

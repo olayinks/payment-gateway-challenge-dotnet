@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\PaymentGateway.Api\PaymentGateway.Api.csproj" />
+    <ProjectReference Include="..\..\src\PaymentGateway.Api\PaymentGateway.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

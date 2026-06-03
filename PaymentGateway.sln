@@ -11,7 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{1EF69307-2
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentGateway.Api.Tests", "test\PaymentGateway.Api.Tests\PaymentGateway.Api.Tests.csproj", "{3A92D8D6-0359-4752-91AE-D8A59622518A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentGateway.Api.Integration.Tests", "PaymentGateway.Api.Integration.Tests\PaymentGateway.Api.Integration.Tests.csproj", "{4D64C380-A3BE-4718-96B9-1A1CBD5F20D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentGateway.Api.Integration.Tests", "test\PaymentGateway.Api.Integration.Tests\PaymentGateway.Api.Integration.Tests.csproj", "{4D64C380-A3BE-4718-96B9-1A1CBD5F20D7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

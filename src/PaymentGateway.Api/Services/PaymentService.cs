@@ -33,6 +33,7 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
                 }
                 var existingPayment = repository.Get(existingRecord.PaymentId)
                     ?? throw new InvalidOperationException("Inconsistent state: Idempotency record exists without corresponding payment");
+
                 logger.LogInformation("Idempotent request with key {Key} already processed, returning existing payment", normalizedIdempotentKey);
                 return new PaymentProcessingResult(existingPayment, AlreadyProcessed: true);
             }

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 using Moq;
@@ -14,6 +15,7 @@ using Moq;
 using PaymentGateway.Api.Controllers;
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Mapper;
+using PaymentGateway.Api.Repository;
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models;
@@ -144,8 +146,11 @@ public class PaymentsControllerTests
 
         var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services => ((ServiceCollection)services)
-                .AddSingleton(paymentsRepository)))
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IPaymentsRepository>();
+                services.AddSingleton<IPaymentsRepository>(paymentsRepository);
+            }))
             .CreateClient();
 
         // Act

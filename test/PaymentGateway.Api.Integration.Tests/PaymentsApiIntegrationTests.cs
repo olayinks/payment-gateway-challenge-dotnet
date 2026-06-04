@@ -88,6 +88,29 @@ namespace PaymentGateway.Api.Integration.Tests
         }
 
         [Fact]
+        public async Task GetPaymentAsync_ReturnsStoredPayment_AfterSuccessfulPost()
+        {
+            var bankClient = CreateBankClientMock(authorize: true);
+            using var factory = CreateFactory(bankClient.Object);
+            using var client = factory.CreateClient();
+
+            var postResponse = await client.PostAsJsonAsync("/api/payments", CreatePaymentRequest());
+            var posted = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+            posted.ShouldNotBeNull();
+
+            var getResponse = await client.GetAsync($"/api/payments/{posted.Id}");
+
+            getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var retrieved = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
+            retrieved.ShouldNotBeNull();
+            retrieved.Id.ShouldBe(posted.Id!.Value);
+            retrieved.Status.ShouldBe(PaymentStatus.Authorized);
+            retrieved.CardNumberLastFour.ShouldBe("1111");
+            retrieved.Currency.ShouldBe("GBP");
+            retrieved.Amount.ShouldBe(1250);
+        }
+
+        [Fact]
         public async Task PostPaymentAsync_ReturnsConflict_WhenSameIdempotencyKeyIsReusedWithDifferentPayload()
         {
             var bankClient = CreateBankClientMock(authorize: true);

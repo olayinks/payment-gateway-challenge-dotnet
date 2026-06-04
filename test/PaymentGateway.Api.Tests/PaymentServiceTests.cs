@@ -1,19 +1,17 @@
-using System.Threading.Tasks;
-
 using AutoMapper;
 
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualBasic;
 
 using Moq;
 
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
+using PaymentGateway.Api.Mapper;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Mapper;
 using PaymentGateway.Api.Models.Validation;
+using PaymentGateway.Api.Repository;
 using PaymentGateway.Api.Services;
 
 using Shouldly;
@@ -219,7 +217,7 @@ public class PaymentServiceTests
             service.ProcessAsync(TestData.PaymentRequest("4417123456789113"), "same-key", CancellationToken.None));
     }
 
-    private static PaymentService CreatePaymentService(PaymentsRepository repository, IBankClient bankClient)
+    private static PaymentService CreatePaymentService(IPaymentsRepository repository, IBankClient bankClient)
     {
         var logger = new Logger<PaymentService>(new LoggerFactory());
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<PaymentProfile>());

@@ -1,5 +1,6 @@
-using PaymentGateway.Api.Services;
 using PaymentGateway.Api.Interfaces;
+using PaymentGateway.Api.Repository;
+using PaymentGateway.Api.Services;
 
 using FluentValidation;
 using PaymentGateway.Api.Models.Validation;
@@ -19,7 +20,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<PostPaymentRequestValidator
 
 builder.Services.Configure<BankApiConfig>(builder.Configuration.GetSection("BankApi"));
 
-builder.Services.AddSingleton<PaymentsRepository>();
+builder.Services.AddSingleton<IPaymentsRepository, PaymentsRepository>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddHttpClient<IBankClient, BankClient>((serviceProvider, client) =>
 {

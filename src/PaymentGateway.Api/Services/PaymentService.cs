@@ -14,10 +14,10 @@ using PaymentGateway.Api.Models.Requests;
 
 namespace PaymentGateway.Api.Services;
 
-public class PaymentService(PaymentsRepository repository, ILogger<PaymentService> logger, IMapper mapper, IBankClient bankClient, IValidator<PostPaymentRequest> validator) : IPaymentService
+public class PaymentService(IPaymentsRepository repository, ILogger<PaymentService> logger, IMapper mapper, IBankClient bankClient, IValidator<PostPaymentRequest> validator) : IPaymentService
 {
 
-    public Task<Payment> GetPaymentAsync(Guid id)
+    public Task<Payment?> GetPaymentAsync(Guid id)
     {
         return Task.FromResult(repository.Get(id));
     }
@@ -95,6 +95,7 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
         }
         return payment;
     }
+
     private static string Hash(PostPaymentRequest request)
     {
         var input = $"{request.Amount}:{request.Currency}:{request.CardNumber}:{request.ExpiryMonth}:{request.ExpiryYear}:{request.Cvv}";

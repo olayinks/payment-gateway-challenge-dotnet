@@ -10,4 +10,7 @@ public class BankPaymentResponse
 
     [JsonPropertyName("authorization_code")]
     public string? AuthorizationCode { get; set; }
+
+    [JsonPropertyName("error_message")]
+    public string? ErrorMessage { get; set; }
 }

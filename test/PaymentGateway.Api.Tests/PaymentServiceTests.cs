@@ -12,6 +12,7 @@ using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
+using PaymentGateway.Api.Mapper;
 using PaymentGateway.Api.Models.Validation;
 using PaymentGateway.Api.Services;
 
@@ -34,7 +35,7 @@ public class PaymentServiceTests
         // Act
         var result = await paymentService.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
         var storedPayment = repository.Get(result.Payment!.Id);
-        var expectedExpiryDate = $"12/{ TestData.PaymentRequest().ExpiryYear}";
+        var expectedExpiryDate = $"12/{TestData.PaymentRequest().ExpiryYear}";
 
         // Assert
         result.Payment.Status.ShouldBe(PaymentStatus.Authorized);
@@ -44,6 +45,25 @@ public class PaymentServiceTests
         bankClientMock.Verify(client => client.AuthorizeAsync(It.Is<BankPaymentRequest>(request => request.CardNumber == "4111111111111111" && request.ExpiryDate == expectedExpiryDate), It.IsAny<CancellationToken>()), Times.Once);
 
 
+    }
+
+    [Fact]
+    public async Task ProcessAsync_sends_zero_padded_expiry_month_to_bank()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
+
+        var request = TestData.PaymentRequest();
+        request.ExpiryMonth = 3;
+
+        await service.ProcessAsync(request, null, CancellationToken.None);
+
+        bankClient.Verify(c => c.AuthorizeAsync(
+            It.Is<BankPaymentRequest>(r => r.ExpiryDate == $"03/{request.ExpiryYear}"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -123,7 +143,7 @@ public class PaymentServiceTests
         var bankClient = new Mock<IBankClient>();
         bankClient
             .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("bank unavailable"));
+            .ThrowsAsync(new HttpRequestException("Bank service unavailable", null, System.Net.HttpStatusCode.ServiceUnavailable));
         var repository = new PaymentsRepository();
         var service = CreatePaymentService(repository, bankClient.Object);
 
@@ -131,7 +151,7 @@ public class PaymentServiceTests
         var storedPayment = repository.Get(result.Payment!.Id);
 
         result.Payment.Status.ShouldBe(PaymentStatus.Declined);
-        result.Payment.ErrorMessage.ShouldBe("Bank simulator is unavailable");
+        result.Payment.ErrorMessage.ShouldBe("Bank service unavailable");
         storedPayment.ShouldNotBeNull();
         storedPayment.Status.ShouldBe(PaymentStatus.Declined);
     }

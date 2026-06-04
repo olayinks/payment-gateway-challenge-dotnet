@@ -81,6 +81,51 @@ public class BankClientTests
     }
 
     [Fact]
+    public async Task AuthorizeAsync_throws_with_bank_error_body_when_bank_returns_400()
+    {
+        var handler = new DelegatingHandlerStub(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("Invalid card number", Encoding.UTF8, "application/json")
+            }));
+
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost:8080") };
+        var options = Options.Create(new BankApiConfig
+        {
+            BaseUrl = new Uri("https://localhost:8080"),
+            PaymentEndpoint = "/payments",
+            TimeoutSeconds = 10
+        });
+
+        var client = new BankClient(httpClient, MockLogger<BankClient>(), options);
+
+        var ex = await Should.ThrowAsync<HttpRequestException>(
+            () => client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
+        ex.Message.ShouldBe("Invalid card number");
+    }
+
+    [Fact]
+    public async Task AuthorizeAsync_throws_when_bank_returns_503()
+    {
+        var handler = new DelegatingHandlerStub(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost:8080") };
+        var options = Options.Create(new BankApiConfig
+        {
+            BaseUrl = new Uri("https://localhost:8080"),
+            PaymentEndpoint = "/payments",
+            TimeoutSeconds = 10
+        });
+
+        var client = new BankClient(httpClient, MockLogger<BankClient>(), options);
+
+        var ex = await Should.ThrowAsync<HttpRequestException>(
+            () => client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
+        ex.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
     public async Task AuthorizeAsync_throws_when_bank_returns_empty_response_body()
     {
         // Arrange

@@ -13,6 +13,7 @@ using Moq;
 
 using PaymentGateway.Api.Controllers;
 using PaymentGateway.Api.Enums;
+using PaymentGateway.Api.Mapper;
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models;
@@ -87,9 +88,9 @@ public class PaymentsControllerTests
     }
 
     [Fact]
-    public async Task PostPaymentAsync_returns_bad_gateway_when_payment_is_declined_by_bank_failure()
+    public async Task PostPaymentAsync_returns_ok_when_payment_is_declined_by_bank()
     {
-        var payment = CreatePayment(PaymentStatus.Declined, errorMessage: "Bank simulator is unavailable.");
+        var payment = CreatePayment(PaymentStatus.Declined, errorMessage: "Bank service unavailable");
         var paymentService = new Mock<IPaymentService>();
         paymentService
             .Setup(service => service.ProcessAsync(It.IsAny<PostPaymentRequest>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -98,11 +99,11 @@ public class PaymentsControllerTests
 
         var result = await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);
 
-        var objectResult = result.Result.ShouldBeOfType<ObjectResult>();
-        objectResult.StatusCode.ShouldBe(StatusCodes.Status502BadGateway);
-        var response = objectResult.Value.ShouldBeOfType<PostPaymentResponse>();
+        var ok = result.Result.ShouldBeOfType<OkObjectResult>();
+        ok.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var response = ok.Value.ShouldBeOfType<PostPaymentResponse>();
         response.Status.ShouldBe(PaymentStatus.Declined);
-        response.Errors.ShouldContain("Bank simulator is unavailable.");
+        response.Errors.ShouldContain("Bank service unavailable");
     }
 
     [Fact]

@@ -19,21 +19,31 @@ public class PostPaymentRequestValidatorTests
     }
 
     [Theory]
-    [InlineData("1234567890123456")]
-    [InlineData("4111111111111")]
-    [InlineData("41111111111111111")]
-    [InlineData("4111-1111-1111-1111")]
-    [InlineData("abcd1234efgh5678")]
+    [InlineData("1234567890123456")]     // 16 digits but fails Luhn   
+    [InlineData("4111111111111")]         // 13 digits 
+    [InlineData("12345678901234567890")]  // 20 digits 
+    [InlineData("41111111111111111")]    // 17 digits but fails Luhn
+    [InlineData("4111-1111-1111-1111")]  // contains dashes
+    [InlineData("abcd1234efgh5678")]      // contains letters
     [InlineData("")]
     [InlineData(null)]
-
     public void Should_Have_Error_When_CardNumber_Is_Invalid(string cardNumber)
     {
         var result = _validator.Validate(TestData.PaymentRequest(cardNumber));
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "CardNumber");
+    }
 
+    [Theory]
+    [InlineData("4111111111111111")]     // 16 digits
+    [InlineData("36259600000004")]       // 14 digits
+    [InlineData("6759649826438453102")]  // 19 digits
+    public void Should_Accept_Valid_Card_Numbers_In_14_To_19_Digit_Range(string cardNumber)
+    {
+        var result = _validator.Validate(TestData.PaymentRequest(cardNumber));
+
+        result.Errors.ShouldNotContain(e => e.PropertyName == "CardNumber");
     }
 
     [Fact]

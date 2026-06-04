@@ -51,11 +51,7 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
 
             var response = mapper.Map<PostPaymentResponse>(result.Payment);
 
-            if (result.Payment.Status is PaymentStatus.Declined)
-            {
-                return StatusCode(StatusCodes.Status502BadGateway, response);
-            }
-            if (result.AlreadyProcessed)
+            if (result.AlreadyProcessed || result.Payment.Status == PaymentStatus.Declined)
             {
                 return Ok(response);
             }

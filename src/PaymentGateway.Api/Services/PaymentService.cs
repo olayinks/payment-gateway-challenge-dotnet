@@ -1,4 +1,6 @@
 
+using System.Net;
+
 using AutoMapper;
 
 using FluentValidation;
@@ -22,6 +24,7 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
 
     public async Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotencyKey, CancellationToken cancellationToken)
     {
+        
         var validationResult = await validator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -29,7 +32,6 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
             logger.LogInformation("Rejected invalid payment request with {ValidationErrorCount} validation errors.", errors.Length);
             return new PaymentProcessingResult(Payment: null, AlreadyProcessed: false, Errors: errors);
         }
-
         var requestHash = Hash(request);
         var normalizedIdempotentKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
         if (normalizedIdempotentKey != null)
@@ -48,7 +50,7 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
                 return new PaymentProcessingResult(existingPayment, AlreadyProcessed: true);
             }
         }
-        logger.LogInformation("Processing new payment request");
+        logger.LogInformation("Processing new payment request for card ending with {CardLastFour}", request.CardNumber[^4..]);
         var payment = await HandleBankSimulationCall(request, cancellationToken);
         repository.Add(payment);
         if (normalizedIdempotentKey != null)
@@ -61,8 +63,6 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
             });
         }
         return new PaymentProcessingResult(payment, AlreadyProcessed: false);
-
-
     }
 
     private async Task<Payment> HandleBankSimulationCall(PostPaymentRequest request, CancellationToken cancellationToken)
@@ -70,18 +70,21 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
         Payment payment;
         try
         {
+            logger.LogInformation("Initiating bank authorization for card ending with {CardLastFour}", request.CardNumber[^4..]);
             var bankRequest = mapper.Map<BankPaymentRequest>(request);
             var bankResponse = await bankClient.AuthorizeAsync(bankRequest, cancellationToken);
             payment = mapper.Map<Payment>(request);
             payment.Status = bankResponse.Authorized ? PaymentStatus.Authorized : PaymentStatus.Declined;
+            payment.ErrorMessage = bankResponse.ErrorMessage;
         }
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "Error communicating with bank");
             payment = mapper.Map<Payment>(request);
             payment.Status = PaymentStatus.Declined;
-            payment.ErrorMessage = "Bank simulator is unavailable";
-
+            payment.ErrorMessage = ex.StatusCode == HttpStatusCode.ServiceUnavailable
+                ? "Bank service unavailable"
+                : ex.Message;
         }
         catch (Exception ex)
         {
@@ -95,8 +98,7 @@ public class PaymentService(PaymentsRepository repository, ILogger<PaymentServic
     private static string Hash(PostPaymentRequest request)
     {
         var input = $"{request.Amount}:{request.Currency}:{request.CardNumber}:{request.ExpiryMonth}:{request.ExpiryYear}:{request.Cvv}";
-        using var sha256 = System.Security.Cryptography.SHA256.Create();
-        var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+        var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
         return Convert.ToBase64String(hashBytes);
     }
 }

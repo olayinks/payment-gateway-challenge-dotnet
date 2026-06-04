@@ -31,27 +31,27 @@ namespace PaymentGateway.Api.Integration.Tests
             var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
             result.ShouldNotBeNull();
             result.Status.ShouldBe(PaymentStatus.Authorized);
-            result.CardNumberLastFour.ShouldBe(1111);
+            result.CardNumberLastFour.ShouldBe("1111");
         }
 
         [Fact]
-        public async Task PostPaymentAsync_ReturnsBadGateway_WhenBankIsUnavailable()
+        public async Task PostPaymentAsync_ReturnsOkWithDeclined_WhenBankIsUnavailable()
         {
             var bankClient = new Mock<IBankClient>();
             bankClient
                 .Setup(c => c.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new HttpRequestException("bank unavailable"));
+                .ThrowsAsync(new HttpRequestException("Bank service unavailable", null, System.Net.HttpStatusCode.ServiceUnavailable));
 
             using var factory = CreateFactory(bankClient.Object);
             using var client = factory.CreateClient();
 
             var response = await client.PostAsJsonAsync("/api/payments", CreatePaymentRequest());
 
-            response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
             var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
             result.ShouldNotBeNull();
             result.Status.ShouldBe(PaymentStatus.Declined);
-            result.Errors.ShouldContain("Bank simulator is unavailable");
+            result.Errors.ShouldContain("Bank service unavailable");
         }
 
         [Fact]

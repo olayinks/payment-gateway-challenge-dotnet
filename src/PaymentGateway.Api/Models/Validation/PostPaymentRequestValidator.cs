@@ -1,5 +1,4 @@
 
-
 using FluentValidation;
 
 using PaymentGateway.Api.Models.Requests;
@@ -9,11 +8,11 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
 {
     public PostPaymentRequestValidator()
     {
-        RuleFor(x => x.CardNumber).NotEmpty().CreditCard()
-        .WithMessage("Card number must be a valid credit card number.")
-        .ChildRules(cardNumber => cardNumber.RuleFor(x => x).Must(x => x.Length == 14 || x.Length == 16)
-                    .WithMessage("Card number must be either 15 or 16 digits long.")
-                    );
+        RuleFor(x => x.CardNumber)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .Matches("^[0-9]{14,19}$").WithMessage("Card number must be between 14 and 19 digits long and contain only digits.")
+            .Must(PassesLuhnCheck).WithMessage("Card number must be a valid credit card number.");
 
         RuleFor(x => x.ExpiryMonth).InclusiveBetween(1, 12).WithMessage("Invalid expiry month. Must be between 1 and 12.");
         RuleFor(x => x).Must(HaveFutureExpiry).WithMessage("Expiry date must not be in the past.");
@@ -26,5 +25,23 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
     {
         var now = DateTime.UtcNow;
         return request.ExpiryYear > now.Year || request.ExpiryYear == now.Year && request.ExpiryMonth >= now.Month;
+    }
+
+    private static bool PassesLuhnCheck(string cardNumber)
+    {
+        var sum = 0;
+        var alternate = false;
+        for (var i = cardNumber.Length - 1; i >= 0; i--)
+        {
+            var digit = cardNumber[i] - '0';
+            if (alternate)
+            {
+                digit *= 2;
+                if (digit > 9) digit -= 9;
+            }
+            sum += digit;
+            alternate = !alternate;
+        }
+        return sum % 10 == 0;
     }
 }

@@ -4,6 +4,7 @@ using PaymentGateway.Api.Interfaces;
 using FluentValidation;
 using PaymentGateway.Api.Models.Validation;
 using Microsoft.Extensions.Options;
+using PaymentGateway.Api.Mapper;
 
 var builder = WebApplication.CreateBuilder(args);
 

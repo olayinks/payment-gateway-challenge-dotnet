@@ -5,6 +5,8 @@ using PaymentGateway.Api.Models.Domain;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 
+namespace PaymentGateway.Api.Mapper;
+
 public class PaymentProfile : Profile
 {
     public PaymentProfile()
@@ -17,7 +19,7 @@ public class PaymentProfile : Profile
         ;
         CreateMap<Payment, GetPaymentResponse>();
         CreateMap<PostPaymentRequest, BankPaymentRequest>()
-            .ForMember(destination => destination.ExpiryDate, option => option.MapFrom(source => $"{source.ExpiryMonth}/{source.ExpiryYear}"));
+            .ForMember(destination => destination.ExpiryDate, option => option.MapFrom(source => $"{source.ExpiryMonth:D2}/{source.ExpiryYear}"));       
 
     }
 }

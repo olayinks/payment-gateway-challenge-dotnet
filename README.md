@@ -49,6 +49,7 @@ Responses:
 ## Key behaviors
 
 - Validation is performed using FluentValidation.
+- Supported payment currencies are `EUR`, `GBP`, and `USD`.
 - Idempotency is supported via an in-memory idempotency store.
 - Bank authorization is performed through an `IBankClient` implementation using `HttpClient`.
 - The payment store is currently in-memory and scoped as a singleton for the lifetime of the application.
@@ -94,8 +95,11 @@ Specific test projects:
 
 ## Notes and assumptions
 
-- The current implementation uses an in-memory repository. This is not Thread safe, but left to be simple. This is acceptable for the coding challenge 
-- Idempotency matching is based on payload hash plus trimmed idempotency key.
+- The current implementation uses an in-memory repository. This is intentionally simple and *not* thread-safe.
+  This is a deliberate tradeoff for the coding challenge: atomicity and transactional guarantees are purposely
+  ignored to keep the in-memory repository straightforward and easy to reason about.
+- Idempotency matching is based on a payload hash plus a trimmed idempotency key.
+
 - The service intentionally accepts declined payments and exposes them through the API rather than returning an HTTP error.
 - Configuration validation is minimal; missing or invalid bank settings may fail at runtime.
 

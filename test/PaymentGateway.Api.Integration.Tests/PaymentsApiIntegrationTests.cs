@@ -35,6 +35,27 @@ namespace PaymentGateway.Api.Integration.Tests
         }
 
         [Fact]
+        public async Task PostPaymentAsync_ReturnsBadRequestWithoutCallingBank_WhenCurrencyIsUnsupported()
+        {
+            var bankClient = CreateBankClientMock(authorize: true);
+            using var factory = CreateFactory(bankClient.Object);
+            using var client = factory.CreateClient();
+            var request = CreatePaymentRequest();
+            request.Currency = "JPY";
+
+            var response = await client.PostAsJsonAsync("/api/payments", request);
+
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+            result.ShouldNotBeNull();
+            result.Status.ShouldBe(PaymentStatus.Rejected);
+            result.Errors.ShouldContain("Currency must be one of: EUR, GBP, USD.");
+            bankClient.Verify(
+                bank => bank.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task PostPaymentAsync_ReturnsOkWithDeclined_WhenBankIsUnavailable()
         {
             var bankClient = new Mock<IBankClient>();

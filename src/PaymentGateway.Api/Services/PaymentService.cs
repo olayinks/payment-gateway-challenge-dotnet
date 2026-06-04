@@ -24,7 +24,7 @@ public class PaymentService(IPaymentsRepository repository, ILogger<PaymentServi
 
     public async Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotencyKey, CancellationToken cancellationToken)
     {
-        
+
         var validationResult = await validator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {

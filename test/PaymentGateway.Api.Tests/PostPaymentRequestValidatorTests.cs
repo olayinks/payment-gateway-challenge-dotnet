@@ -85,27 +85,35 @@ public class PostPaymentRequestValidatorTests
     }
 
     [Theory]
-    [InlineData("GP")]
-    [InlineData("GB")]
-    [InlineData("USDA")]
-    [InlineData("usd")]
-    public void Should_Have_Valid_Currency(string currency)
+    [InlineData("EUR")]
+    [InlineData("GBP")]
+    [InlineData("USD")]
+    public void Validate_accepts_supported_currency(string currency)
     {
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "4111111111111111",
-            ExpiryMonth = 12,
-            ExpiryYear = DateTime.UtcNow.Year + 1,
-            Amount = 100,
-            Currency = currency,
-            Cvv = "123"
-        };
+        var request = TestData.PaymentRequest();
+        request.Currency = currency;
+
+        var result = _validator.Validate(request);
+
+        result.Errors.ShouldNotContain(error => error.PropertyName == nameof(PostPaymentRequest.Currency));
+    }
+
+    [Theory]
+    [InlineData("ABC")]
+    [InlineData("JPY")]
+    [InlineData("usd")]
+    [InlineData("USDA")]
+    public void Validate_rejects_unsupported_currency(string currency)
+    {
+        var request = TestData.PaymentRequest();
+        request.Currency = currency;
 
         var result = _validator.Validate(request);
 
         result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.PropertyName == "Currency");
-        result.Errors.ShouldContain(e => e.ErrorMessage == "Currency must be a valid 3-letter ISO code.");
+        result.Errors.ShouldContain(error =>
+            error.PropertyName == nameof(PostPaymentRequest.Currency)
+            && error.ErrorMessage == "Currency must be one of: EUR, GBP, USD.");
     }
 
     [Theory]

@@ -6,6 +6,13 @@ namespace PaymentGateway.Api.Models.Validation;
 
 public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
 {
+    private static readonly HashSet<string> SupportedCurrencies = new(StringComparer.Ordinal)
+    {
+        "EUR",
+        "GBP",
+        "USD",
+    };
+
     public PostPaymentRequestValidator()
     {
         RuleFor(x => x.CardNumber)
@@ -19,7 +26,11 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
         RuleFor(x => x.ExpiryMonth).InclusiveBetween(1, 12).WithMessage("Invalid expiry month. Must be between 1 and 12.");
         RuleFor(x => x).Must(HaveFutureExpiry).WithMessage("Expiry date must not be in the past.");
         RuleFor(x => x.Amount).GreaterThan(0);
-        RuleFor(x => x.Currency).NotEmpty().Length(3).Matches("^[A-Z]{3}$").WithMessage("Currency must be a valid 3-letter ISO code.");
+        RuleFor(x => x.Currency)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .Must(SupportedCurrencies.Contains)
+            .WithMessage("Currency must be one of: EUR, GBP, USD.");
         RuleFor(x => x.Cvv).NotEmpty().Matches("^[0-9]{3,4}$").WithMessage("CVV must be 3 or 4 digits long.");
     }
 
@@ -28,5 +39,4 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
         var now = DateTime.UtcNow;
         return request.ExpiryYear > now.Year || request.ExpiryYear == now.Year && request.ExpiryMonth >= now.Month;
     }
-   
 }

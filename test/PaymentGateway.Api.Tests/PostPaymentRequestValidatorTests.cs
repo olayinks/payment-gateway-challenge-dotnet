@@ -26,10 +26,21 @@ public class PostPaymentRequestValidatorTests
     [InlineData("4111-1111-1111-1111")]  // contains dashes
     [InlineData("abcd1234efgh5678")]      // contains letters
     [InlineData("")]
-    [InlineData(null)]
     public void Should_Have_Error_When_CardNumber_Is_Invalid(string cardNumber)
     {
         var result = _validator.Validate(TestData.PaymentRequest(cardNumber));
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "CardNumber");
+    }
+
+    [Fact]
+    public void Should_Have_Error_When_CardNumber_Is_Null()
+    {
+        var request = TestData.PaymentRequest();
+        request.CardNumber = null!;
+
+        var result = _validator.Validate(request);
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "CardNumber");

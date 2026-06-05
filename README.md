@@ -150,7 +150,8 @@ This section captures the deliberate trade-offs made to keep the solution focuse
 
 - Unit tests cover validation, the payment service, idempotency behavior, controller responses, and the bank client.
 - Integration tests cover the API pipeline with a mocked `IBankClient`.
-- The current integration tests do not exercise the real Mountebank simulator; a production-grade test strategy would add simulator-backed contract tests for the bank boundary.
+- The current integration tests do not exercise the real Mountebank simulator. This is a deliberate trade-off for the interview scope: simulator-backed contract tests would add Docker orchestration and external dependency concerns to the normal test run.
+- A production-grade test strategy would add opt-in simulator-backed contract tests for the bank boundary, covering authorized, declined, and unavailable bank responses.
 
 ## Structure
 

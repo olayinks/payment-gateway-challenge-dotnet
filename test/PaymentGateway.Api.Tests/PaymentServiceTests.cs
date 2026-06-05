@@ -5,9 +5,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 using PaymentGateway.Api.Enums;
-using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Mapper;
+using PaymentGateway.Api.Models;
+using PaymentGateway.Api.Models.Domain;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Models.Validation;
@@ -15,6 +16,7 @@ using PaymentGateway.Api.Repository;
 using PaymentGateway.Api.Services;
 
 using Shouldly;
+
 namespace PaymentGateway.Api.Tests;
 
 public class PaymentServiceTests
@@ -22,27 +24,23 @@ public class PaymentServiceTests
     [Fact]
     public async Task ProcessAsync_should_Authorize_From_Bank_and_stores_payment_with_last4Digit_card_number()
     {
-        // Arrange
         var repository = new PaymentsRepository();
         var bankClientMock = new Mock<IBankClient>();
         bankClientMock.Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "0bb07405-6d44-4b50-a14f-7ae0beff13ad" });
-
         var paymentService = CreatePaymentService(repository, bankClientMock.Object);
 
-        // Act
         var result = await paymentService.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
         var storedPayment = repository.Get(result.Payment!.Id);
         var expectedExpiryDate = $"12/{TestData.PaymentRequest().ExpiryYear}";
 
-        // Assert
         result.Payment.Status.ShouldBe(PaymentStatus.Authorized);
         result.Payment.CardNumberLastFour.ShouldBe("1111");
         storedPayment.ShouldNotBeNull();
         storedPayment.CardNumberLastFour.ShouldBe("1111");
-        bankClientMock.Verify(client => client.AuthorizeAsync(It.Is<BankPaymentRequest>(request => request.CardNumber == "4111111111111111" && request.ExpiryDate == expectedExpiryDate), It.IsAny<CancellationToken>()), Times.Once);
-
-
+        bankClientMock.Verify(client => client.AuthorizeAsync(
+            It.Is<BankPaymentRequest>(r => r.CardNumber == "4111111111111111" && r.ExpiryDate == expectedExpiryDate),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -53,7 +51,6 @@ public class PaymentServiceTests
             .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
         var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
-
         var request = TestData.PaymentRequest();
         request.ExpiryMonth = 3;
 
@@ -65,26 +62,6 @@ public class PaymentServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_replays_same_payment_when_idempotency_key_and_payload_match()
-    {
-        var bankClient = new Mock<IBankClient>();
-        bankClient
-            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
-        var repository = new PaymentsRepository();
-        var service = CreatePaymentService(repository, bankClient.Object);
-        var request = TestData.PaymentRequest();
-
-        var first = await service.ProcessAsync(request, "same-key", CancellationToken.None);
-        var second = await service.ProcessAsync(request, "same-key", CancellationToken.None);
-
-        first.AlreadyProcessed.ShouldBeFalse();
-        second.AlreadyProcessed.ShouldBeTrue();
-        second.Payment!.Id.ShouldBe(first.Payment!.Id);
-        bankClient.Verify(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
     public async Task ProcessAsync_stores_declined_payment_when_bank_declines()
     {
         var bankClient = new Mock<IBankClient>();
@@ -93,46 +70,11 @@ public class PaymentServiceTests
             .ReturnsAsync(new BankPaymentResponse { Authorized = false, AuthorizationCode = string.Empty });
         var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
 
-        var result = await service.ProcessAsync(TestData.PaymentRequest("4242424242424242"), idempotencyKey: null, CancellationToken.None);
+        var result = await service.ProcessAsync(TestData.PaymentRequest("4242424242424242"), null, CancellationToken.None);
+
         result.Payment.ShouldNotBeNull();
-        var payment = result.Payment!;
-
-        payment.Status.ShouldBe(PaymentStatus.Declined);
-        payment.CardNumberLastFour.ShouldBe("4242");
-    }
-
-    [Fact]
-    public async Task ProcessAsync_rejects_same_idempotency_key_with_different_payload()
-    {
-        var bankClient = new Mock<IBankClient>();
-        bankClient
-            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
-        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
-
-        await service.ProcessAsync(TestData.PaymentRequest("4111111111111111"), "same-key", CancellationToken.None);
-
-        await Should.ThrowAsync<IdempotencyConflictException>(() =>
-            service.ProcessAsync(TestData.PaymentRequest("4417123456789113"), "same-key", CancellationToken.None));
-    }
-
-
-    [Fact]
-    public async Task ProcessAsync_should_run_successfully_when_idempotencyKey_provided_But_record_does_not_exist()
-    {
-        var bankClient = new Mock<IBankClient>();
-        bankClient
-            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
-        var repository = new PaymentsRepository();
-        var service = CreatePaymentService(repository, bankClient.Object);
-
-        var result = await service.ProcessAsync(TestData.PaymentRequest(), "new-key", CancellationToken.None);
-        var storedPayment = repository.Get(result.Payment!.Id);
-
-        result.Payment.Status.ShouldBe(PaymentStatus.Authorized);
-        storedPayment.ShouldNotBeNull();
-        storedPayment.Status.ShouldBe(PaymentStatus.Authorized);
+        result.Payment!.Status.ShouldBe(PaymentStatus.Declined);
+        result.Payment.CardNumberLastFour.ShouldBe("4242");
     }
 
     [Fact]
@@ -145,7 +87,7 @@ public class PaymentServiceTests
         var repository = new PaymentsRepository();
         var service = CreatePaymentService(repository, bankClient.Object);
 
-        var result = await service.ProcessAsync(TestData.PaymentRequest("4000000000000010"), idempotencyKey: null, CancellationToken.None);
+        var result = await service.ProcessAsync(TestData.PaymentRequest("4000000000000010"), null, CancellationToken.None);
         var storedPayment = repository.Get(result.Payment!.Id);
 
         result.Payment.Status.ShouldBe(PaymentStatus.Declined);
@@ -160,28 +102,11 @@ public class PaymentServiceTests
         var bankClient = new Mock<IBankClient>();
         var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
 
-        var result = await service.ProcessAsync(TestData.PaymentRequest("123"), idempotencyKey: null, CancellationToken.None);
+        var result = await service.ProcessAsync(TestData.PaymentRequest("123"), null, CancellationToken.None);
 
         result.Payment.ShouldBeNull();
         result.Errors.ShouldNotBeEmpty();
         bankClient.Verify(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task ProcessAsync_trims_idempotency_key_before_lookup()
-    {
-        var bankClient = new Mock<IBankClient>();
-        bankClient
-            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
-        var repository = new PaymentsRepository();
-        var service = CreatePaymentService(repository, bankClient.Object);
-
-        var result = await service.ProcessAsync(TestData.PaymentRequest(), "  same-key  ", CancellationToken.None);
-
-        result.AlreadyProcessed.ShouldBeFalse();
-        result.Payment.ShouldNotBeNull();
-        repository.GetIdempotencyRecord("same-key").ShouldNotBeNull();
     }
 
     [Fact]
@@ -203,26 +128,58 @@ public class PaymentServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_should_throw_exception_when_IdempotencyKey_isUsed_with_different_payload()
+    public async Task ProcessAsync_returns_existingPayment_when_idempotency_service_returns_existing_result()
+    {
+        var existingPayment = new Payment { Id = Guid.NewGuid(), Status = PaymentStatus.Authorized };
+        var replay = new PaymentProcessingResult(existingPayment, AlreadyProcessed: true);
+        var idempotencyService = new Mock<IIdempotencyService>();
+        idempotencyService.Setup(s => s.Check("existing-key", It.IsAny<PostPaymentRequest>())).Returns(replay);
+        var bankClient = new Mock<IBankClient>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, idempotencyService.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), "existing-key", CancellationToken.None);
+
+        result.AlreadyProcessed.ShouldBeTrue();
+        result.Payment!.Id.ShouldBe(existingPayment.Id);
+        bankClient.Verify(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_records_idempotency_after_bank_authorization()
     {
         var bankClient = new Mock<IBankClient>();
         bankClient
-            .Setup(client => client.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
-        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object);
+        var idempotencyService = new Mock<IIdempotencyService>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, idempotencyService.Object);
 
-        await service.ProcessAsync(TestData.PaymentRequest("4111111111111111"), "same-key", CancellationToken.None);
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), "my-key", CancellationToken.None);
 
-        await Should.ThrowAsync<IdempotencyConflictException>(() =>
-            service.ProcessAsync(TestData.PaymentRequest("4417123456789113"), "same-key", CancellationToken.None));
+        idempotencyService.Verify(s => s.Record("my-key", It.IsAny<PostPaymentRequest>(), result.Payment!.Id), Times.Once);
     }
 
-    private static PaymentService CreatePaymentService(IPaymentsRepository repository, IBankClient bankClient)
+    [Fact]
+    public async Task ProcessAsync_does_not_record_idempotency_when_no_key_provided()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-123" });
+        var idempotencyService = new Mock<IIdempotencyService>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, idempotencyService.Object);
+
+        await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        idempotencyService.Verify(s => s.Record(It.IsAny<string>(), It.IsAny<PostPaymentRequest>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    private static PaymentService CreatePaymentService(IPaymentsRepository repository, IBankClient bankClient, IIdempotencyService? idempotencyService = null)
     {
         var logger = new Logger<PaymentService>(new LoggerFactory());
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<PaymentProfile>());
         var mapper = mapperConfig.CreateMapper();
-        return new PaymentService(repository, logger, mapper, bankClient, new PostPaymentRequestValidator());
+        idempotencyService ??= Mock.Of<IIdempotencyService>();
+        return new PaymentService(repository, idempotencyService, logger, mapper, bankClient, new PostPaymentRequestValidator());
     }
-
 }

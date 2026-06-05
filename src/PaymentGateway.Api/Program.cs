@@ -21,6 +21,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<PostPaymentRequestValidator
 builder.Services.Configure<BankApiConfig>(builder.Configuration.GetSection("BankApi"));
 
 builder.Services.AddSingleton<IPaymentsRepository, PaymentsRepository>();
+builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddHttpClient<IBankClient, BankClient>((serviceProvider, client) =>
 {

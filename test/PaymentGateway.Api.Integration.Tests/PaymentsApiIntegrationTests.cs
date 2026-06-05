@@ -19,6 +19,18 @@ namespace PaymentGateway.Api.Integration.Tests
     public class PaymentsApiIntegrationTests
     {
         [Fact]
+        public async Task Health_ReturnsOk()
+        {
+            var bankClient = CreateBankClientMock(authorize: true);
+            using var factory = CreateFactory(bankClient.Object);
+            using var client = factory.CreateClient();
+
+            var response = await client.GetAsync("/health");
+
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        [Fact]
         public async Task PostPaymentAsync_ReturnsCreated_WhenBankAuthorizes()
         {
             var bankClient = CreateBankClientMock(authorize: true);

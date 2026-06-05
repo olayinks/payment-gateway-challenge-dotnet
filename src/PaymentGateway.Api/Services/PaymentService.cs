@@ -20,7 +20,11 @@ public class PaymentService(
     IBankClient bankClient,
     IValidator<PostPaymentRequest> validator) : IPaymentService
 {
-    public Task<Payment?> GetPaymentAsync(Guid id) => Task.FromResult(repository.Get(id));
+    public Task<Payment?> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(repository.Get(id));
+    }
 
     public async Task<PaymentProcessingResult> ProcessAsync(PostPaymentRequest request, string? idempotencyKey, CancellationToken cancellationToken)
     {

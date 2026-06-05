@@ -16,14 +16,14 @@ namespace PaymentGateway.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger, IMapper mapper) : Controller
+public class PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger, IMapper mapper) : ControllerBase
 {
     private const string IdempotencyKeyHeader = "Idempotency-Key";
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<GetPaymentResponse?>> GetPaymentAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<GetPaymentResponse?>> GetPayment(Guid id, CancellationToken cancellationToken)
     {
-        var payment = await paymentService.GetPaymentAsync(id);
+        var payment = await paymentService.GetPaymentAsync(id, cancellationToken);
         if (payment is null)
         {
             return NotFound();
@@ -55,7 +55,7 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
             {
                 return Ok(response);
             }
-            return Created($"/api/payments/{result.Payment.Id}", response);
+            return CreatedAtAction(nameof(GetPayment), new { id = result.Payment.Id }, response);
         }
         catch (IdempotencyConflictException ex)
         {

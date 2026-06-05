@@ -22,6 +22,31 @@ namespace PaymentGateway.Api.Tests;
 public class PaymentServiceTests
 {
     [Fact]
+    public async Task GetPaymentAsync_returns_payment_when_it_exists()
+    {
+        var repository = new PaymentsRepository();
+        var payment = new Payment { Id = Guid.NewGuid(), Status = PaymentStatus.Authorized };
+        repository.Add(payment);
+        var service = CreatePaymentService(repository, Mock.Of<IBankClient>());
+
+        var result = await service.GetPaymentAsync(payment.Id, CancellationToken.None);
+
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe(payment.Id);
+    }
+
+    [Fact]
+    public async Task GetPaymentAsync_throws_when_cancellation_is_requested()
+    {
+        var service = CreatePaymentService(new PaymentsRepository(), Mock.Of<IBankClient>());
+        using var cancellationTokenSource = new CancellationTokenSource();
+        await cancellationTokenSource.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            service.GetPaymentAsync(Guid.NewGuid(), cancellationTokenSource.Token));
+    }
+
+    [Fact]
     public async Task ProcessAsync_should_Authorize_From_Bank_and_stores_payment_with_last4Digit_card_number()
     {
         var repository = new PaymentsRepository();

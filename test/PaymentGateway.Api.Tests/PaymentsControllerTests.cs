@@ -47,10 +47,11 @@ public class PaymentsControllerTests
         var result = await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);
 
         // Assert
-        var createdResult = result.Result as CreatedResult;
-        createdResult?.Location.ShouldBe($"/api/payments/{payment.Id}");
-        createdResult?.StatusCode.ShouldBe(StatusCodes.Status201Created);
-        var response = createdResult?.Value.ShouldBeOfType<PostPaymentResponse>();
+        var createdResult = result.Result.ShouldBeOfType<CreatedAtActionResult>();
+        createdResult.ActionName.ShouldBe(nameof(PaymentsController.GetPayment));
+        createdResult.RouteValues!["id"].ShouldBe(payment.Id);
+        createdResult.StatusCode.ShouldBe(StatusCodes.Status201Created);
+        var response = createdResult.Value.ShouldBeOfType<PostPaymentResponse>();
         response?.Status.ShouldBe(PaymentStatus.Authorized);
     }
 

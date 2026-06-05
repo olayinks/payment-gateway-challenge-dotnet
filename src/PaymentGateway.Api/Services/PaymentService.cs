@@ -46,6 +46,14 @@ public class PaymentService(
         if (!string.IsNullOrWhiteSpace(idempotencyKey))
             idempotencyService.Record(idempotencyKey, request, payment.Id);
 
+        logger.LogInformation(
+            "Payment processing completed with {PaymentStatus} for payment {PaymentId}, amount {Amount} {Currency}, card ending with {CardLastFour}",
+            payment.Status,
+            payment.Id,
+            payment.Amount,
+            payment.Currency,
+            payment.CardNumberLastFour);
+
         return new PaymentProcessingResult(payment, AlreadyProcessed: false);
     }
 
@@ -63,7 +71,7 @@ public class PaymentService(
         }
         catch (HttpRequestException ex)
         {
-            logger.LogError(ex, "Error communicating with bank");
+            logger.LogWarning(ex, "Error communicating with bank");
             var payment = mapper.Map<Payment>(request);
             payment.Status = PaymentStatus.Declined;
             payment.ErrorMessage = ex.StatusCode == HttpStatusCode.ServiceUnavailable

@@ -137,6 +137,7 @@ This section captures the deliberate trade-offs made to keep the solution focuse
 
 - The API uses structured logging around validation, idempotency replay, bank calls, and bank errors.
 - A basic `/health` endpoint is exposed.
+- The API does not accept a client-supplied request ID, so request correlation currently relies on framework-generated request context rather than an explicit business/request identifier.
 - Metrics, tracing, correlation IDs, and deeper readiness checks are intentionally out of scope for this exercise.
 
 ### Hosting and packaging

@@ -50,10 +50,11 @@ public class PaymentServiceTests
     public async Task ProcessAsync_should_Authorize_From_Bank_and_stores_payment_with_last4Digit_card_number()
     {
         var repository = new PaymentsRepository();
+        var logger = new Mock<ILogger<PaymentService>>();
         var bankClientMock = new Mock<IBankClient>();
         bankClientMock.Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "0bb07405-6d44-4b50-a14f-7ae0beff13ad" });
-        var paymentService = CreatePaymentService(repository, bankClientMock.Object);
+        var paymentService = CreatePaymentService(repository, bankClientMock.Object, logger: logger.Object);
 
         var result = await paymentService.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
         var storedPayment = repository.Get(result.Payment!.Id);
@@ -63,6 +64,7 @@ public class PaymentServiceTests
         result.Payment.CardNumberLastFour.ShouldBe("1111");
         storedPayment.ShouldNotBeNull();
         storedPayment.CardNumberLastFour.ShouldBe("1111");
+        logger.VerifyLog(LogLevel.Information, "Payment processing completed", Times.Once());
         bankClientMock.Verify(client => client.AuthorizeAsync(
             It.Is<BankPaymentRequest>(r => r.CardNumber == "4111111111111111" && r.ExpiryDate == expectedExpiryDate),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -199,12 +201,17 @@ public class PaymentServiceTests
         idempotencyService.Verify(s => s.Record(It.IsAny<string>(), It.IsAny<PostPaymentRequest>(), It.IsAny<Guid>()), Times.Never);
     }
 
-    private static PaymentService CreatePaymentService(IPaymentsRepository repository, IBankClient bankClient, IIdempotencyService? idempotencyService = null)
+    private static PaymentService CreatePaymentService(
+        IPaymentsRepository repository,
+        IBankClient bankClient,
+        IIdempotencyService? idempotencyService = null,
+        ILogger<PaymentService>? logger = null)
     {
-        var logger = new Logger<PaymentService>(new LoggerFactory());
+        logger ??= new Logger<PaymentService>(new LoggerFactory());
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<PaymentProfile>());
         var mapper = mapperConfig.CreateMapper();
         idempotencyService ??= Mock.Of<IIdempotencyService>();
         return new PaymentService(repository, idempotencyService, logger, mapper, bankClient, new PostPaymentRequestValidator());
     }
+
 }

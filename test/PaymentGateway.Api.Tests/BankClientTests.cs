@@ -7,6 +7,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using Moq;
+
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Services;
@@ -83,6 +85,7 @@ public class BankClientTests
     [Fact]
     public async Task AuthorizeAsync_throws_with_bank_error_body_when_bank_returns_400()
     {
+        var logger = new Mock<ILogger<BankClient>>();
         var handler = new DelegatingHandlerStub(_ =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
             {
@@ -97,11 +100,13 @@ public class BankClientTests
             TimeoutSeconds = 10
         });
 
-        var client = new BankClient(httpClient, MockLogger<BankClient>(), options);
+        var client = new BankClient(httpClient, logger.Object, options);
 
         var ex = await Should.ThrowAsync<HttpRequestException>(
             () => client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
         ex.Message.ShouldBe("Invalid card number");
+        logger.VerifyLog(LogLevel.Warning, "Bank API rejected the payment authorization request", Times.Once());
+        logger.VerifyLogDoesNotContain("Invalid card number");
     }
 
     [Fact]

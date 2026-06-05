@@ -20,7 +20,7 @@ public class BankClient(HttpClient httpClient, ILogger<BankClient> logger, IOpti
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            logger.LogError("Bank API rejected the payment authorization request with status code: {StatusCode} with error {errorBody}", response.StatusCode, errorBody);
+            logger.LogWarning("Bank API rejected the payment authorization request with status code: {StatusCode}", response.StatusCode);
 
             throw new HttpRequestException(errorBody);
         }

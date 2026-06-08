@@ -40,7 +40,7 @@ public class PaymentsControllerTests
         var paymentServiceMock = new Mock<IPaymentService>();
         paymentServiceMock.Setup(service => service.ProcessAsync(It.IsAny<PostPaymentRequest>(),
         It.IsAny<string>(), It.IsAny<CancellationToken>()))
-        .ReturnsAsync(new Models.PaymentProcessingResult(payment, AlreadyProcessed: false));
+        .ReturnsAsync(new Models.PaymentProcessingResult(payment, alreadyProcessed: false));
         var controller = CreateController(paymentServiceMock.Object);
 
         // Act
@@ -78,7 +78,7 @@ public class PaymentsControllerTests
         var paymentService = new Mock<IPaymentService>();
         paymentService
             .Setup(service => service.ProcessAsync(It.IsAny<PostPaymentRequest>(), "same-key", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PaymentProcessingResult(payment, AlreadyProcessed: true));
+            .ReturnsAsync(new PaymentProcessingResult(payment, alreadyProcessed: true));
         var controller = CreateController(paymentService.Object);
         controller.ControllerContext.HttpContext.Request.Headers["Idempotency-Key"] = "same-key";
 
@@ -97,7 +97,7 @@ public class PaymentsControllerTests
         var paymentService = new Mock<IPaymentService>();
         paymentService
             .Setup(service => service.ProcessAsync(It.IsAny<PostPaymentRequest>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PaymentProcessingResult(payment, AlreadyProcessed: false));
+            .ReturnsAsync(new PaymentProcessingResult(payment, alreadyProcessed: false));
         var controller = CreateController(paymentService.Object);
 
         var result = await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);

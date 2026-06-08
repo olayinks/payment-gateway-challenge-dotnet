@@ -158,7 +158,7 @@ public class PaymentServiceTests
     public async Task ProcessAsync_returns_existingPayment_when_idempotency_service_returns_existing_result()
     {
         var existingPayment = new Payment { Id = Guid.NewGuid(), Status = PaymentStatus.Authorized };
-        var replay = new PaymentProcessingResult(existingPayment, AlreadyProcessed: true);
+        var replay = new PaymentProcessingResult(existingPayment, alreadyProcessed: true);
         var idempotencyService = new Mock<IIdempotencyService>();
         idempotencyService.Setup(s => s.Check("existing-key", It.IsAny<PostPaymentRequest>())).Returns(replay);
         var bankClient = new Mock<IBankClient>();

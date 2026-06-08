@@ -26,7 +26,7 @@ public class IdempotencyService(IPaymentsRepository repository, ILogger<Idempote
             ?? throw new InvalidOperationException("Inconsistent state: idempotency record exists without corresponding payment");
 
         logger.LogInformation("Idempotent request with key {Key} already processed, returning existing payment", normalizedKey);
-        return new PaymentProcessingResult(existingPayment, AlreadyProcessed: true);
+        return new PaymentProcessingResult(existingPayment, alreadyProcessed: true);
     }
 
     public void Record(string key, PostPaymentRequest request, Guid paymentId) =>
@@ -39,7 +39,8 @@ public class IdempotencyService(IPaymentsRepository repository, ILogger<Idempote
 
     private static string Hash(PostPaymentRequest request)
     {
-        var input = $"{request.Amount}:{request.Currency}:{request.CardNumber}:{request.ExpiryMonth}:{request.ExpiryYear}:{request.Cvv}";
+        var cardLastFourDigits = request.CardNumber[^4..];
+        var input = $"{request.Amount}:{request.Currency}:{cardLastFourDigits}:{request.ExpiryMonth}:{request.ExpiryYear}";
         return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
     }
 }

@@ -54,7 +54,7 @@ public class PaymentService(
             payment.Currency,
             payment.CardNumberLastFour);
 
-        return new PaymentProcessingResult(payment, AlreadyProcessed: false);
+        return new PaymentProcessingResult(payment, alreadyProcessed: false);
     }
 
     private async Task<Payment> HandleBankSimulationCall(PostPaymentRequest request, CancellationToken cancellationToken)

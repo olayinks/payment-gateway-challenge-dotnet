@@ -92,6 +92,37 @@ public class IdempotencyServiceTests
         repository.GetIdempotencyRecord("test-key").ShouldNotBeNull();
     }
 
+    [Fact]
+    public void Check_returns_existing_payment_when_cards_differ_only_in_non_last_four_digits()
+    {
+         var repository = new PaymentsRepository();
+        var service = CreateService(repository);
+        var payment = new Payment { Id = Guid.NewGuid() };
+        repository.Add(payment);
+        service.Record("test-key", TestData.PaymentRequest("4111111111111111"), payment.Id);
+
+        var result = service.Check("test-key", TestData.PaymentRequest("5111111111111111"));
+
+        result.ShouldNotBeNull();
+        result.AlreadyProcessed.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("4111111111111111", "4242424242424242")]
+    public void Check_throws_conflict_when_card_last_four_differs(string first, string second)
+    {
+        var repository = new PaymentsRepository();
+        var service = CreateService(repository);
+        var payment = new Payment { Id = Guid.NewGuid() };
+        repository.Add(payment);
+        service.Record("test-key", TestData.PaymentRequest(first), payment.Id);
+
+        Should.Throw<IdempotencyConflictException>(() =>
+            service.Check("test-key", TestData.PaymentRequest(second)));
+    }
+
+   
+
     private static IdempotencyService CreateService(IPaymentsRepository repository) =>
         new(repository, new Logger<IdempotencyService>(new LoggerFactory()));
 }

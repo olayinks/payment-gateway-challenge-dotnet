@@ -74,9 +74,7 @@ public class PaymentService(
             logger.LogWarning(ex, "Error communicating with bank");
             var payment = mapper.Map<Payment>(request);
             payment.Status = PaymentStatus.Declined;
-            payment.ErrorMessage = ex.StatusCode == HttpStatusCode.ServiceUnavailable
-                ? "Bank service unavailable"
-                : ex.Message;
+            payment.ErrorMessage = "Bank service unavailable";
             return payment;
         }
         catch (Exception ex)

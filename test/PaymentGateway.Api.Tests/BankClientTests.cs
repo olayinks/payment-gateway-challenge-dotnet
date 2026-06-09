@@ -83,6 +83,56 @@ public class BankClientTests
     }
 
     [Fact]
+    public async Task AuthorizeAsync_logs_card_amount_and_currency_when_sending_request()
+    {
+        var logger = new Mock<ILogger<BankClient>>();
+        var handler = new DelegatingHandlerStub(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-1" })
+            }));
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost:8080") };
+        var options = Options.Create(new BankApiConfig
+        {
+            BaseUrl = new Uri("https://localhost:8080"),
+            PaymentEndpoint = "/payments",
+            TimeoutSeconds = 10
+        });
+        var client = new BankClient(httpClient, logger.Object, options);
+        var request = new BankPaymentRequest { CardNumber = "4111111111111111", Amount = 1250, Currency = "GBP", ExpiryDate = "12/2027", Cvv = "123" };
+
+        await client.AuthorizeAsync(request, CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Information, "amount 1250 GBP", Times.Once());
+    }
+
+    [Fact]
+    public async Task AuthorizeAsync_logs_card_context_when_bank_returns_400()
+    {
+        var logger = new Mock<ILogger<BankClient>>();
+        var handler = new DelegatingHandlerStub(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("bad request", System.Text.Encoding.UTF8, "application/json")
+            }));
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost:8080") };
+        var options = Options.Create(new BankApiConfig
+        {
+            BaseUrl = new Uri("https://localhost:8080"),
+            PaymentEndpoint = "/payments",
+            TimeoutSeconds = 10
+        });
+        var client = new BankClient(httpClient, logger.Object, options);
+        var request = new BankPaymentRequest { CardNumber = "4111111111111111", Amount = 500, Currency = "USD", ExpiryDate = "12/2027", Cvv = "123" };
+
+        await Should.ThrowAsync<HttpRequestException>(() => client.AuthorizeAsync(request, CancellationToken.None));
+
+        logger.VerifyLog(LogLevel.Warning, "1111", Times.Once());
+        logger.VerifyLog(LogLevel.Warning, "500", Times.Once());
+        logger.VerifyLog(LogLevel.Warning, "USD", Times.Once());
+    }
+
+    [Fact]
     public async Task AuthorizeAsync_throws_with_bank_error_body_when_bank_returns_400()
     {
         var logger = new Mock<ILogger<BankClient>>();
@@ -103,10 +153,31 @@ public class BankClientTests
         var client = new BankClient(httpClient, logger.Object, options);
 
         var ex = await Should.ThrowAsync<HttpRequestException>(
-            () => client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
+            () => client.AuthorizeAsync(new BankPaymentRequest { CardNumber = "4111111111111111" }, CancellationToken.None));
         ex.Message.ShouldBe("Invalid card number");
         logger.VerifyLog(LogLevel.Warning, "Bank API rejected the payment authorization request", Times.Once());
         logger.VerifyLogDoesNotContain("Invalid card number");
+    }
+
+    [Fact]
+    public async Task AuthorizeAsync_logs_status_code_before_throwing_when_bank_returns_non_400_error()
+    {
+        var logger = new Mock<ILogger<BankClient>>();
+        var handler = new DelegatingHandlerStub(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost:8080") };
+        var options = Options.Create(new BankApiConfig
+        {
+            BaseUrl = new Uri("https://localhost:8080"),
+            PaymentEndpoint = "/payments",
+            TimeoutSeconds = 10
+        });
+        var client = new BankClient(httpClient, logger.Object, options);
+
+        await Should.ThrowAsync<HttpRequestException>(
+            () => client.AuthorizeAsync(new BankPaymentRequest { CardNumber = "4111111111111111" }, CancellationToken.None));
+
+        logger.VerifyLog(LogLevel.Warning, "ServiceUnavailable", Times.Once());
     }
 
     [Fact]
@@ -126,7 +197,7 @@ public class BankClientTests
         var client = new BankClient(httpClient, MockLogger<BankClient>(), options);
 
         var ex = await Should.ThrowAsync<HttpRequestException>(
-            () => client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
+            () => client.AuthorizeAsync(new BankPaymentRequest { CardNumber = "4111111111111111" }, CancellationToken.None));
         ex.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
     }
 
@@ -155,7 +226,7 @@ public class BankClientTests
 
         // Act & Assert
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await client.AuthorizeAsync(new BankPaymentRequest(), CancellationToken.None));
+            await client.AuthorizeAsync(new BankPaymentRequest { CardNumber = "4111111111111111" }, CancellationToken.None));
     }
 
     private static Logger<T> MockLogger<T>() => new(new LoggerFactory());

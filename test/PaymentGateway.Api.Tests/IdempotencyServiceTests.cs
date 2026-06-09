@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 
+using Moq;
+
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
 using PaymentGateway.Api.Models.Domain;
@@ -122,6 +124,21 @@ public class IdempotencyServiceTests
     }
 
    
+
+    [Fact]
+    public void Record_logs_idempotency_key_and_payment_id()
+    {
+        var repository = new PaymentsRepository();
+        var logger = new Mock<ILogger<IdempotencyService>>();
+        var service = new IdempotencyService(repository, logger.Object);
+        var paymentId = Guid.NewGuid();
+        repository.Add(new Payment { Id = paymentId });
+
+        service.Record("my-key", TestData.PaymentRequest(), paymentId);
+
+        logger.VerifyLog(LogLevel.Information, "my-key", Times.Once());
+        logger.VerifyLog(LogLevel.Information, paymentId.ToString(), Times.Once());
+    }
 
     private static IdempotencyService CreateService(IPaymentsRepository repository) =>
         new(repository, new Logger<IdempotencyService>(new LoggerFactory()));

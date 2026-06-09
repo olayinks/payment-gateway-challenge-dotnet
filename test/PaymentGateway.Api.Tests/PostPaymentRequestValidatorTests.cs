@@ -95,6 +95,25 @@ public class PostPaymentRequestValidatorTests
         result.Errors.ShouldContain(e => e.ErrorMessage == "Invalid expiry month. Must be between 1 and 12.");
     }
 
+    [Fact]
+    public void Should_Have_Valid_Expiry_Year()
+    {
+        var request = new PostPaymentRequest
+        {
+            CardNumber = "4111111111111111",
+            ExpiryMonth = 12,
+            ExpiryYear = 0,
+            Amount = 100,
+            Currency = "USD",
+            Cvv = "123"
+        };
+
+        var result = _validator.Validate(request);
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "ExpiryYear");
+    }
+
     [Theory]
     [InlineData("EUR")]
     [InlineData("GBP")]
@@ -127,10 +146,24 @@ public class PostPaymentRequestValidatorTests
             && error.ErrorMessage == "Currency must be one of: EUR, GBP, USD.");
     }
 
+    [Fact]
+    public void Should_Have_NotEmpty_Error_Only_When_Cvv_Is_Empty()
+    {
+        var request = TestData.PaymentRequest();
+        request.Cvv = "";
+
+        var result = _validator.Validate(request);
+
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName == "Cvv");
+        result.Errors.ShouldNotContain(e => e.ErrorMessage == "CVV must be a digit and be 3 or 4 digits long.");
+    }
+
     [Theory]
     [InlineData("12")]
     [InlineData("12345")]
     [InlineData("abc")]
+    [InlineData("A12")]
     public void Should_Be_Valid_CVV(string cvv)
     {
         var request = new PostPaymentRequest
@@ -147,6 +180,6 @@ public class PostPaymentRequestValidatorTests
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "Cvv");
-        result.Errors.ShouldContain(e => e.ErrorMessage == "CVV must be 3 or 4 digits long.");
+        result.Errors.ShouldContain(e => e.ErrorMessage == "CVV must be a digit and be 3 or 4 digits long.");
     }
 }

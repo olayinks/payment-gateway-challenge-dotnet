@@ -13,24 +13,38 @@ public class BankClient(HttpClient httpClient, ILogger<BankClient> logger, IOpti
 {
     public async Task<BankPaymentResponse> AuthorizeAsync(BankPaymentRequest request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Sending payment authorization request to bank API");
+        var lastFourDigits = request.CardNumber[^4..];
+        logger.LogInformation(
+            "Sending payment authorization request to bank API for card ending with {CardLastFour}, amount {Amount} {Currency}",
+            lastFourDigits,
+            request.Amount,
+            request.Currency);
 
         using var response = await httpClient.PostAsJsonAsync(options.Value.PaymentEndpoint, request, cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            logger.LogWarning("Bank API rejected the payment authorization request with status code: {StatusCode}", response.StatusCode);
+            logger.LogWarning(
+                "Bank API rejected the payment authorization request with status code {StatusCode} for card ending with {CardLastFour}, amount {Amount} {Currency}",
+                response.StatusCode,
+                lastFourDigits,
+                request.Amount,
+                request.Currency);
 
             throw new HttpRequestException(errorBody);
         }
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Bank API returned unexpected status code {StatusCode} for card ending with {CardLastFour}", response.StatusCode, lastFourDigits);
+            response.EnsureSuccessStatusCode();
+        }
 
         var bankResponse = await response.Content.ReadFromJsonAsync<BankPaymentResponse>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Bank API returned an empty response");
 
-        logger.LogInformation("Bank API request for card ending with : {CardNumber} is completed with status code: {StatusCode}", request.CardNumber[^4..], response.StatusCode);
+        logger.LogInformation("Bank API authorization completed for card ending with {CardLastFour}, status {StatusCode}", lastFourDigits, response.StatusCode);
         return bankResponse;
     }
 }

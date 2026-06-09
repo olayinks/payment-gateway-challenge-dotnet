@@ -24,6 +24,7 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
             .WithMessage("Card number must be a valid credit card number.");
 
         RuleFor(x => x.ExpiryMonth).InclusiveBetween(1, 12).WithMessage("Invalid expiry month. Must be between 1 and 12.");
+        RuleFor(x => x.ExpiryYear).NotEmpty();
         RuleFor(x => x).Must(HaveFutureExpiry).WithMessage("Expiry date must not be in the past.");
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency)
@@ -31,7 +32,7 @@ public class PostPaymentRequestValidator : AbstractValidator<PostPaymentRequest>
             .NotEmpty()
             .Must(SupportedCurrencies.Contains)
             .WithMessage("Currency must be one of: EUR, GBP, USD.");
-        RuleFor(x => x.Cvv).NotEmpty().Matches("^[0-9]{3,4}$").WithMessage("CVV must be 3 or 4 digits long.");
+        RuleFor(x => x.Cvv).Cascade(CascadeMode.Stop).NotEmpty().Matches("^[0-9]{3,4}$").WithMessage("CVV must be a digit and be 3 or 4 digits long.");
     }
 
     private static bool HaveFutureExpiry(PostPaymentRequest request)

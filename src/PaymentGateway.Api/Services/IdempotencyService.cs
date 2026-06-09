@@ -25,17 +25,21 @@ public class IdempotencyService(IPaymentsRepository repository, ILogger<Idempote
         var existingPayment = repository.Get(existingRecord.PaymentId)
             ?? throw new InvalidOperationException("Inconsistent state: idempotency record exists without corresponding payment");
 
-        logger.LogInformation("Idempotent request with key {Key} already processed, returning existing payment", normalizedKey);
+        logger.LogInformation("Idempotent request with idempotency key {IdempotencyKey} already processed, returning existing payment", normalizedKey);
         return new PaymentProcessingResult(existingPayment, alreadyProcessed: true);
     }
 
-    public void Record(string key, PostPaymentRequest request, Guid paymentId) =>
+    public void Record(string key, PostPaymentRequest request, Guid paymentId)
+    {
+        var normalizedKey = key.Trim();
         repository.AddIdempotencyRecord(new IdempotencyRecord
         {
-            Key = key.Trim(),
+            Key = normalizedKey,
             RequestHash = Hash(request),
             PaymentId = paymentId
         });
+        logger.LogInformation("Recorded idempotency key {IdempotencyKey} for payment {PaymentId}", normalizedKey, paymentId);
+    }
 
     private static string Hash(PostPaymentRequest request)
     {

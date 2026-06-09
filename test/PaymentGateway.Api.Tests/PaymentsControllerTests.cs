@@ -129,6 +129,22 @@ public class PaymentsControllerTests
 
 
     [Fact]
+    public async Task PostPaymentAsync_logs_idempotency_key_on_conflict()
+    {
+        var paymentService = new Mock<IPaymentService>();
+        paymentService
+            .Setup(s => s.ProcessAsync(It.IsAny<PostPaymentRequest>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IdempotencyConflictException("my-conflict-key"));
+        var logger = new Mock<ILogger<PaymentsController>>();
+        var controller = CreateController(paymentService.Object, logger.Object);
+        controller.ControllerContext.HttpContext.Request.Headers["Idempotency-Key"] = "my-conflict-key";
+
+        await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Warning, "my-conflict-key", Times.Once());
+    }
+
+    [Fact]
     public async Task GetPaymentAsync_returns_ok_when_payment_exists()
     {
         // Arrange
@@ -178,9 +194,38 @@ public class PaymentsControllerTests
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    private static PaymentsController CreateController(IPaymentService paymentService)
+    [Fact]
+    public async Task GetPayment_logs_not_found_when_payment_does_not_exist()
     {
-        return new PaymentsController(paymentService, Mock.Of<ILogger<PaymentsController>>(), CreateMapper())
+        var paymentService = new Mock<IPaymentService>();
+        paymentService.Setup(s => s.GetPaymentAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Payment?)null);
+        var logger = new Mock<ILogger<PaymentsController>>();
+        var controller = CreateController(paymentService.Object, logger.Object);
+
+        await controller.GetPayment(Guid.NewGuid(), CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Information, "was not found", Times.Once());
+    }
+
+    [Fact]
+    public async Task GetPayment_logs_success_when_payment_is_found()
+    {
+        var payment = CreatePayment(PaymentStatus.Authorized);
+        var paymentService = new Mock<IPaymentService>();
+        paymentService.Setup(s => s.GetPaymentAsync(payment.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payment);
+        var logger = new Mock<ILogger<PaymentsController>>();
+        var controller = CreateController(paymentService.Object, logger.Object);
+
+        await controller.GetPayment(payment.Id, CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Information, "retrieved successfully", Times.Once());
+    }
+
+    private static PaymentsController CreateController(IPaymentService paymentService, ILogger<PaymentsController>? logger = null)
+    {
+        return new PaymentsController(paymentService, logger ?? Mock.Of<ILogger<PaymentsController>>(), CreateMapper())
         {
             ControllerContext = new ControllerContext
             {

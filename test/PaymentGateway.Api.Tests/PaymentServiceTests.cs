@@ -89,6 +89,36 @@ public class PaymentServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_completion_log_includes_error_message_none_when_authorized()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-1" });
+        var logger = new Mock<ILogger<PaymentService>>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, logger: logger.Object);
+
+        await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Information, "error none", Times.Once());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_completion_log_includes_error_message_when_bank_unavailable()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Bank service unavailable", null, System.Net.HttpStatusCode.ServiceUnavailable));
+        var logger = new Mock<ILogger<PaymentService>>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, logger: logger.Object);
+
+        await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        logger.VerifyLog(LogLevel.Information, "error Bank service unavailable", Times.Once());
+    }
+
+    [Fact]
     public async Task ProcessAsync_stores_declined_payment_when_bank_declines()
     {
         var bankClient = new Mock<IBankClient>();

@@ -39,7 +39,6 @@ public class PaymentService(
         var existingPayment = idempotencyService.Check(idempotencyKey, request);
         if (existingPayment != null) return existingPayment;
 
-        logger.LogInformation("Processing new payment request for card ending with {CardLastFour}", request.CardNumber[^4..]);
         var payment = await HandleBankSimulationCall(request, cancellationToken);
         repository.Add(payment);
 
@@ -47,12 +46,13 @@ public class PaymentService(
             idempotencyService.Record(idempotencyKey, request, payment.Id);
 
         logger.LogInformation(
-            "Payment processing completed with {PaymentStatus} for payment {PaymentId}, amount {Amount} {Currency}, card ending with {CardLastFour}",
+            "Payment processing completed with {PaymentStatus} for payment {PaymentId}, amount {Amount} {Currency}, card ending with {CardLastFour}, error {ErrorMessage}",
             payment.Status,
             payment.Id,
             payment.Amount,
             payment.Currency,
-            payment.CardNumberLastFour);
+            payment.CardNumberLastFour,
+            payment.ErrorMessage ?? "none");
 
         return new PaymentProcessingResult(payment, alreadyProcessed: false);
     }
@@ -61,7 +61,6 @@ public class PaymentService(
     {
         try
         {
-            logger.LogInformation("Initiating bank authorization for card ending with {CardLastFour}", request.CardNumber[^4..]);
             var bankRequest = mapper.Map<BankPaymentRequest>(request);
             var bankResponse = await bankClient.AuthorizeAsync(bankRequest, cancellationToken);
             var payment = mapper.Map<Payment>(request);
@@ -69,9 +68,8 @@ public class PaymentService(
             payment.ErrorMessage = bankResponse.ErrorMessage;
             return payment;
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            logger.LogWarning(ex, "Error communicating with bank");
             var payment = mapper.Map<Payment>(request);
             payment.Status = PaymentStatus.Declined;
             payment.ErrorMessage = "Bank service unavailable";

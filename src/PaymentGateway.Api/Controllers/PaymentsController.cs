@@ -26,9 +26,10 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
         var payment = await paymentService.GetPaymentAsync(id, cancellationToken);
         if (payment is null)
         {
+            logger.LogInformation("Payment with id {PaymentId} was not found.", id);
             return NotFound();
         }
-
+        logger.LogInformation("Payment with id {PaymentId} was retrieved successfully.", id);
         return new OkObjectResult(mapper.Map<GetPaymentResponse>(payment));
     }
 
@@ -41,7 +42,6 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
             var result = await paymentService.ProcessAsync(request, idempotencyKey, cancellationToken);
             if (result.Payment is null)
             {
-                logger.LogInformation("Rejected invalid payment request with {ValidationErrorCount} validation errors.", result.Errors.Count);
                 return BadRequest(new PostPaymentResponse
                 {
                     Status = PaymentStatus.Rejected,
@@ -59,7 +59,8 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
         }
         catch (IdempotencyConflictException ex)
         {
-            logger.LogError(ex, "Rejected payment request because the idempotency key was reused with a different payload.");
+            Request.Headers.TryGetValue(IdempotencyKeyHeader, out var conflictingKey);
+            logger.LogWarning(ex, "Idempotency key {IdempotencyKey} was reused with a different payload.", (string?)conflictingKey);
 
             return Conflict(new PostPaymentResponse
             {

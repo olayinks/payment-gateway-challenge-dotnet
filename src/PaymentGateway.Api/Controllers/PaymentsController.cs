@@ -1,20 +1,16 @@
 ﻿using AutoMapper;
 
-using FluentValidation;
-
 using Microsoft.AspNetCore.Mvc;
 
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Exceptions;
 using PaymentGateway.Api.Interfaces;
-using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Services;
 
 namespace PaymentGateway.Api.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
 [ApiController]
 public class PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger, IMapper mapper) : ControllerBase
 {
@@ -51,11 +47,12 @@ public class PaymentsController(IPaymentService paymentService, ILogger<Payments
 
             var response = mapper.Map<PostPaymentResponse>(result.Payment);
 
-            if (result.AlreadyProcessed || result.Payment.Status == PaymentStatus.Declined)
-            {
-                return Ok(response);
-            }
-            return CreatedAtAction(nameof(GetPayment), new { id = result.Payment.Id }, response);
+            if (result.Payment.Status == PaymentStatus.Declined)
+                return StatusCode(StatusCodes.Status402PaymentRequired, response);
+
+            return result.AlreadyProcessed
+                ? Ok(response)
+                : CreatedAtAction(nameof(GetPayment), new { id = result.Payment.Id }, response);
         }
         catch (IdempotencyConflictException ex)
         {

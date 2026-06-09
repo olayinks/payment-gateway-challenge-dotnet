@@ -71,6 +71,76 @@ public class PaymentServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_stores_authorization_code_from_bank_on_authorized_payment()
+    {
+        const string authCode = "0bb07405-6d44-4b50-a14f-7ae0beff13ad";
+        var repository = new PaymentsRepository();
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = authCode });
+        var service = CreatePaymentService(repository, bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        result.Payment.ShouldNotBeNull();
+        result.Payment!.AuthorizationCode.ShouldBe(authCode);
+        repository.Get(result.Payment.Id)!.AuthorizationCode.ShouldBe(authCode);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_does_not_store_authorization_code_when_bank_declines()
+    {
+        var repository = new PaymentsRepository();
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = false, AuthorizationCode = null });
+        var service = CreatePaymentService(repository, bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        result.Payment.ShouldNotBeNull();
+        result.Payment!.AuthorizationCode.ShouldBeNull();
+        repository.Get(result.Payment.Id)!.AuthorizationCode.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProcessAsync_assigns_payment_id_before_bank_call_and_logs_it()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BankPaymentResponse { Authorized = true, AuthorizationCode = "auth-1" });
+        var logger = new Mock<ILogger<PaymentService>>();
+        var service = CreatePaymentService(new PaymentsRepository(), bankClient.Object, logger: logger.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        result.Payment.ShouldNotBeNull();
+        result.Payment!.Id.ShouldNotBe(Guid.Empty);
+        logger.VerifyLog(LogLevel.Information, result.Payment.Id.ToString(), Times.AtLeastOnce());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_payment_id_is_consistent_when_bank_is_unavailable()
+    {
+        var bankClient = new Mock<IBankClient>();
+        bankClient
+            .Setup(b => b.AuthorizeAsync(It.IsAny<BankPaymentRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Service unavailable", null, System.Net.HttpStatusCode.ServiceUnavailable));
+        var repository = new PaymentsRepository();
+        var service = CreatePaymentService(repository, bankClient.Object);
+
+        var result = await service.ProcessAsync(TestData.PaymentRequest(), null, CancellationToken.None);
+
+        result.Payment.ShouldNotBeNull();
+        result.Payment!.Id.ShouldNotBe(Guid.Empty);
+        repository.Get(result.Payment.Id).ShouldNotBeNull();
+        repository.Get(result.Payment.Id)!.Id.ShouldBe(result.Payment.Id);
+    }
+
+    [Fact]
     public async Task ProcessAsync_sends_zero_padded_expiry_month_to_bank()
     {
         var bankClient = new Mock<IBankClient>();

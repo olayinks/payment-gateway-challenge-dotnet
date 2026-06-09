@@ -91,7 +91,7 @@ public class PaymentsControllerTests
     }
 
     [Fact]
-    public async Task PostPaymentAsync_returns_ok_when_payment_is_declined_by_bank()
+    public async Task PostPaymentAsync_returns_402_when_payment_is_declined_by_bank()
     {
         var payment = CreatePayment(PaymentStatus.Declined, errorMessage: "Bank service unavailable");
         var paymentService = new Mock<IPaymentService>();
@@ -102,11 +102,28 @@ public class PaymentsControllerTests
 
         var result = await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);
 
-        var ok = result.Result.ShouldBeOfType<OkObjectResult>();
-        ok.StatusCode.ShouldBe(StatusCodes.Status200OK);
-        var response = ok.Value.ShouldBeOfType<PostPaymentResponse>();
+        var objectResult = result.Result.ShouldBeOfType<ObjectResult>();
+        objectResult.StatusCode.ShouldBe(StatusCodes.Status402PaymentRequired);
+        var response = objectResult.Value.ShouldBeOfType<PostPaymentResponse>();
         response.Status.ShouldBe(PaymentStatus.Declined);
         response.Errors.ShouldContain("Bank service unavailable");
+    }
+
+    [Fact]
+    public async Task PostPaymentAsync_returns_402_when_idempotent_replay_is_a_declined_payment()
+    {
+        var payment = CreatePayment(PaymentStatus.Declined);
+        var paymentService = new Mock<IPaymentService>();
+        paymentService
+            .Setup(service => service.ProcessAsync(It.IsAny<PostPaymentRequest>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaymentProcessingResult(payment, alreadyProcessed: true));
+        var controller = CreateController(paymentService.Object);
+
+        var result = await controller.PostPaymentAsync(TestData.PaymentRequest(), CancellationToken.None);
+
+        var objectResult = result.Result.ShouldBeOfType<ObjectResult>();
+        objectResult.StatusCode.ShouldBe(StatusCodes.Status402PaymentRequired);
+        objectResult.Value.ShouldBeOfType<PostPaymentResponse>().Status.ShouldBe(PaymentStatus.Declined);
     }
 
     [Fact]
@@ -171,7 +188,7 @@ public class PaymentsControllerTests
             .CreateClient();
 
         // Act
-        var response = await client.GetAsync($"/api/Payments/{payment.Id}");
+        var response = await client.GetAsync($"/api/v1/Payments/{payment.Id}");
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
@@ -188,7 +205,7 @@ public class PaymentsControllerTests
         var client = webApplicationFactory.CreateClient();
 
         // Act
-        var response = await client.GetAsync($"/api/Payments/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/v1/Payments/{Guid.NewGuid()}");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);

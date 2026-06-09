@@ -39,7 +39,8 @@ public class PaymentService(
         var existingPayment = idempotencyService.Check(idempotencyKey, request);
         if (existingPayment != null) return existingPayment;
 
-        var payment = await HandleBankSimulationCall(request, cancellationToken);
+        var paymentId = Guid.NewGuid();
+        var payment = await HandleBankSimulationCall(request, paymentId, cancellationToken);
         repository.Add(payment);
 
         if (!string.IsNullOrWhiteSpace(idempotencyKey))
@@ -57,28 +58,36 @@ public class PaymentService(
         return new PaymentProcessingResult(payment, alreadyProcessed: false);
     }
 
-    private async Task<Payment> HandleBankSimulationCall(PostPaymentRequest request, CancellationToken cancellationToken)
+    private async Task<Payment> HandleBankSimulationCall(PostPaymentRequest request, Guid paymentId, CancellationToken cancellationToken)
     {
         try
         {
+            logger.LogInformation(
+                "Initiating bank authorization for payment {PaymentId}, card ending with {CardLastFour}",
+                paymentId,
+                request.CardNumber[^4..]);
             var bankRequest = mapper.Map<BankPaymentRequest>(request);
             var bankResponse = await bankClient.AuthorizeAsync(bankRequest, cancellationToken);
             var payment = mapper.Map<Payment>(request);
+            payment.Id = paymentId;
             payment.Status = bankResponse.Authorized ? PaymentStatus.Authorized : PaymentStatus.Declined;
+            payment.AuthorizationCode = bankResponse.AuthorizationCode;
             payment.ErrorMessage = bankResponse.ErrorMessage;
             return payment;
         }
         catch (HttpRequestException)
         {
             var payment = mapper.Map<Payment>(request);
+            payment.Id = paymentId;
             payment.Status = PaymentStatus.Declined;
             payment.ErrorMessage = "Bank service unavailable";
             return payment;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unexpected error during payment processing");
+            logger.LogError(ex, "Unexpected error during payment processing for payment {PaymentId}", paymentId);
             var payment = mapper.Map<Payment>(request);
+            payment.Id = paymentId;
             payment.Status = PaymentStatus.Declined;
             payment.ErrorMessage = "An unexpected error occurred during payment processing";
             return payment;

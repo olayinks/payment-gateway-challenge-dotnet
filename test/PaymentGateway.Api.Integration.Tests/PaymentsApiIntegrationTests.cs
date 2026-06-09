@@ -37,7 +37,7 @@ namespace PaymentGateway.Api.Integration.Tests
             using var factory = CreateFactory(bankClient.Object);
             using var client = factory.CreateClient();
 
-            var response = await client.PostAsJsonAsync("/api/payments", CreatePaymentRequest());
+            var response = await client.PostAsJsonAsync("/api/v1/payments", CreatePaymentRequest());
 
             response.StatusCode.ShouldBe(HttpStatusCode.Created);
             var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
@@ -55,7 +55,7 @@ namespace PaymentGateway.Api.Integration.Tests
             var request = CreatePaymentRequest();
             request.Currency = "JPY";
 
-            var response = await client.PostAsJsonAsync("/api/payments", request);
+            var response = await client.PostAsJsonAsync("/api/v1/payments", request);
 
             response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
             var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
@@ -68,7 +68,7 @@ namespace PaymentGateway.Api.Integration.Tests
         }
 
         [Fact]
-        public async Task PostPaymentAsync_ReturnsOkWithDeclined_WhenBankIsUnavailable()
+        public async Task PostPaymentAsync_Returns402WithDeclined_WhenBankIsUnavailable()
         {
             var bankClient = new Mock<IBankClient>();
             bankClient
@@ -78,9 +78,9 @@ namespace PaymentGateway.Api.Integration.Tests
             using var factory = CreateFactory(bankClient.Object);
             using var client = factory.CreateClient();
 
-            var response = await client.PostAsJsonAsync("/api/payments", CreatePaymentRequest());
+            var response = await client.PostAsJsonAsync("/api/v1/payments", CreatePaymentRequest());
 
-            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            response.StatusCode.ShouldBe(HttpStatusCode.PaymentRequired);
             var result = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
             result.ShouldNotBeNull();
             result.Status.ShouldBe(PaymentStatus.Declined);
@@ -127,11 +127,11 @@ namespace PaymentGateway.Api.Integration.Tests
             using var factory = CreateFactory(bankClient.Object);
             using var client = factory.CreateClient();
 
-            var postResponse = await client.PostAsJsonAsync("/api/payments", CreatePaymentRequest());
+            var postResponse = await client.PostAsJsonAsync("/api/v1/payments", CreatePaymentRequest());
             var posted = await postResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
             posted.ShouldNotBeNull();
 
-            var getResponse = await client.GetAsync($"/api/payments/{posted.Id}");
+            var getResponse = await client.GetAsync($"/api/v1/payments/{posted.Id}");
 
             getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
             var retrieved = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
@@ -173,7 +173,7 @@ namespace PaymentGateway.Api.Integration.Tests
 
         private static async Task<HttpResponseMessage> SendPostPaymentRequest(HttpClient client, PostPaymentRequest request, string idempotencyKey)
         {
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payments")
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/payments")
             {
                 Content = JsonContent.Create(request)
             };
